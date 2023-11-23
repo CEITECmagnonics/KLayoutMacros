@@ -3,7 +3,7 @@ Useful macros for KLayout.
 
 These macros are used in the KLayout software, see its main page [here](https://www.klayout.de/).
 
-User-defined macros (with the `.lym` extension) should be placed in the `macros` (ruby code) or `pymacros` (python code) folders in the KLayout installation folder. Actually, there are two poossible locations (both are usable):
+User-defined macros (with the `.lym` extension) should be placed in the `macros` (ruby code) or `pymacros` (python code) folders in the KLayout installation folder. For Windows, there are two possible locations (both are usable):
 - `C:\Users\<Username>\AppData\Roaming\KLayout` for global macros,
 - `C:\Users\<Username>\KLayout` for local macros.
 
