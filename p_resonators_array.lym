@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="utf-8"?>
+<klayout-macro>
+ <description/>
+ <version/>
+ <category>pymacros</category>
+ <prolog/>
+ <epilog/>
+ <doc/>
+ <autorun>true</autorun>
+ <autorun-early>false</autorun-early>
+ <shortcut/>
+ <show-in-menu>false</show-in-menu>
+ <group-name/>
+ <menu-path/>
+ <interpreter>python</interpreter>
+ <dsl-interpreter-name/>
+ <text>import pya
+import math
+
+"""
+This sample PCell implements a library called "MyLibJKL" with a single PCell that
+draws a PResonatorArray. This parametric array allows the user to create an array 
+of circles within a given bounding box. These resonators can be tilted by 
+an arbitrary angle while maintaining square lattice.
+
+NOTE: after changing the code, the macro needs to be rerun to install the new
+implementation.
+
+Created by Jan Klima on 2023/11/12
+Last update: 2023/11/23
+"""
+
+class PResonatorArray(pya.PCellDeclarationHelper):
+  """
+  The PCell declaration for the Parray
+  """
+
+  def __init__(self):
+
+    # Important: initialize the super class
+    super(PResonatorArray, self).__init__()
+
+    # declare the parameters
+    self.param("l", self.TypeLayer, "Layer", default=pya.LayerInfo(1, 0))
+    self.param("ref", self.TypeShape, "", default=pya.DPoint(0, 0))  # reference point
+    self.param("d", self.TypeDouble, "Diameter (µm)", default=0.2)  # resonator diameter (um)
+    self.param("r", self.TypeDouble, "Radius (µm)", readonly=True)  # may be more useful in calculations
+    self.param("space", self.TypeDouble, "Spacing (µm)", default=0.5)  # resonator spacing (um)
+    self.param("tilt", self.TypeDouble, "Tilt (deg)", default=8)  # array tilt (deg)
+    self.param("fieldx", self.TypeDouble, "Field size X (µm)", default=50)
+    self.param("fieldy", self.TypeDouble, "Field size Y (µm)", default=50)  # field to fit the resonators into
+    self.param("ppc", self.TypeInt, "Points per Circle", default=64)  # number of points in each circle
+
+  def display_text_impl(self):
+    # Provide a descriptive text for the cell
+    return "PResonatorArray(L="+str(self.l)+")"
+  
+  def coerce_parameters_impl(self):
+    self.r = self.d/2.0  # recompute radius from diameter
+    if self.ppc &lt;= 4:  # ppc must be larger or equal to 4
+      self.ppc = 4
+    self.tilt = self.tilt % 90  # tilt must be between 0 and 90 deg
+  
+  def can_create_from_shape_impl(self):
+    # Implement the "Create PCell from shape" protocol: we can use any shape which 
+    # has a finite bounding box
+    return self.shape.is_box() or self.shape.is_polygon() or self.shape.is_path()
+  
+  def parameters_from_shape_impl(self):
+    # Implement the "Create PCell from shape" protocol: we set r and l from the shape's 
+    # bounding box width and layer
+    self.d = self.shape.dbbox().width()
+    self.r = self.shape.dbbox().width()/2.0
+    self.l = self.layout.get_info(self.layer)
+  
+  def transformation_from_shape_impl(self):
+    # Implement the "Create PCell from shape" protocol: we use the center of the shape's
+    # bounding box to determine the transformation
+    # return pya.Trans(pya.Point(0,0))  # maybe try this
+    return pya.Trans(self.shape.bbox().center())
+  
+  def produce_impl(self):
+  
+    # This is the main part of the implementation: create the layout
+    
+    # fetch the parameters
+    r = self.r  # radius for short
+    rdbu = self.r/self.layout.dbu  # convert radius to dbu
+    
+    # ### calculate the positions (lattice) ###
+    
+    def uv2x(cu, cv):
+      """Calculate x coordinate from (u,v) lattice points."""
+      return r-cu*self.space*math.sin(self.tilt/180.*math.pi)+cv*self.space*math.cos(self.tilt/180.*math.pi)
+
+    def uv2y(cu, cv):
+      """Calculate y coordinate from (u,v) lattice points."""
+      return r+cu*self.space*math.cos(self.tilt/180.*math.pi)+cv*self.space*math.sin(self.tilt/180.*math.pi)
+      
+    # I want to omit the points outside or touching the bounding field
+    # nmax = maximum points to fit in the field
+    nmax = int(((self.fieldx-2*r)**2+(self.fieldy-2*r)**2)**0.5//self.space)
+    lattice = []  # list of resonator positions in the field
+    for u in range(-nmax+1, nmax):
+      for v in range(nmax):
+        xnow, ynow = uv2x(u, v), uv2y(u, v)
+        if (r &lt;= xnow &lt; self.fieldx-r) and (r &lt;= ynow &lt; self.fieldy-r):
+          lattice.append([xnow/self.layout.dbu, ynow/self.layout.dbu])
+    # print(len(lattice), nmax)
+    # print(lattice[:150])
+    # print(lattice[-150:])
+    
+    # pre-compute the circle (points in dbu)
+    pts = []
+    da = math.pi * 2 / self.ppc  # angle step
+    for i in range(0, self.ppc):
+      pts.append([rdbu*math.cos(i*da), rdbu*math.sin(i*da)])
+    
+    # create the shapes
+    ptsnew = pts
+    for i in range(len(lattice)):
+      for j in range(self.ppc):
+        if i == 0:
+          ptsnew[j][0] = pts[j][0]+lattice[i][0]
+          ptsnew[j][1] = pts[j][1]+lattice[i][1]
+        else:
+          ptsnew[j][0] = pts[j][0]+lattice[i][0]-lattice[i-1][0]  # I substract the last value bcs insertion
+          ptsnew[j][1] = pts[j][1]+lattice[i][1]-lattice[i-1][1]  # ...happens with respect to last item
+      ptsnow = [pya.Point.from_dpoint(pya.DPoint(*jj)) for jj in ptsnew]  # list of Points
+      self.cell.shapes(self.l_layer).insert(pya.Polygon(ptsnow))
+
+
+class MyLibJKL(pya.Library):
+  """
+  The library where we will put the PCell into 
+  """
+
+  def __init__(self):
+  
+    # Set the description
+    self.description = "My First Library (by Jan Klima)"
+    
+    # Create the PCell declarations
+    self.layout().register_pcell("PResonatorArray", PResonatorArray())
+    # That would be the place to put in more PCells ...
+    
+    # Register us with the name "MyLib".
+    # If a library with that name already existed, it will be replaced then.
+    self.register("MyLibJKL")
+
+
+# Instantiate and register the library
+MyLibJKL()
+</text>
+</klayout-macro>
