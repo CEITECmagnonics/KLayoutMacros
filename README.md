@@ -7,7 +7,7 @@ User-defined macros (with the `.lym` extension) should be placed in the `macros`
 - `C:\Users\<Username>\AppData\Roaming\KLayout` for global macros,
 - `C:\Users\<Username>\KLayout` for local macros.
 
-To use these scripts, copy the desired `.lym` files in one of those folders. Then run KLayout and open the _Macro Development_ window by clicking _Macro Development_ in the _Macros_ tab or pressing F5. Your copied fiels should be visible in one of the folders in the panel on the left. If not, try creating a new macro by clicking on _Create_ (+) and selecting _General KLayout Macro (.lym)_. Then copy the text from the file here to this new file, rename it and save it.
+To use these scripts, copy the desired `.lym` files in one of those folders. Then run KLayout and open the _Macro Development_ window by clicking _Macro Development_ in the _Macros_ tab or pressing F5. Your copied files should be visible in one of the folders in the panel on the left. If not, try creating a new macro by clicking on _Create_ (+) and selecting _General KLayout Macro (.lym)_. Then copy the text from the file here to this new file, rename it and save it.
 
 If you want to use the macro, you need to run the script first. After it finishes, you can go back to the KLayout's main window. When you would like to create an instance using that macro you just installed, select the macro in the _Libraries_ panel from the correct library and drag it onto the design.
 
