@@ -1,0 +1,233 @@
+<?xml version="1.0" encoding="utf-8"?>
+<klayout-macro>
+ <description/>
+ <version/>
+ <category>pymacros</category>
+ <prolog/>
+ <epilog/>
+ <doc/>
+ <autorun>true</autorun>
+ <autorun-early>false</autorun-early>
+ <shortcut/>
+ <show-in-menu>false</show-in-menu>
+ <group-name/>
+ <menu-path/>
+ <interpreter>python</interpreter>
+ <dsl-interpreter-name/>
+ <text>"""
+This sample PCell implements a library called "CPWdesign" with a single PCell that
+draws a PCPWTapers. This parametric array allows the user to create a tapered CPW 
+tranforming one CPW design to another. Used e.g. for transitions from PCB to 
+a desired CPW transmission line. There are three possible taper designs:
+- linear taper
+- exponential taper
+- sine taper
+
+NOTE: after changing the code, the macro needs to be rerun to install the new
+implementation.
+
+Created by Jan Klima on 2024/11/15
+Last update: 2024/11/15
+"""
+
+import pya
+import numpy as np
+# import math
+
+
+class PCPWTapers(pya.PCellDeclarationHelper):
+  """
+  The PCell declaration for the Parray
+  """
+
+  def __init__(self):
+
+    # Important: initialize the super class
+    super(PCPWTapers, self).__init__()
+
+    # declare the parameters
+    self.param("l", self.TypeLayer, "Layer", default=pya.LayerInfo(1, 0))
+    self.param("ref", self.TypeShape, "", default=pya.DPoint(0, 0))  # reference point
+    self.param("taper_type", self.TypeString, "Taper type", choices=[["linear", "lin"], ["exponential", "exp"], ["sine", "sin"]], default="lin")
+    self.param("trlen", self.TypeDouble, "Transition length (µm)", default=0.2)
+    self.param("ppt", self.TypeInt, "Points per transition", default=11)  # including edge points
+    self.param("sig0", self.TypeDouble, "Signal width 0 (µm)", default=0.2)
+    self.param("gap0", self.TypeDouble, "Gap width 0 (µm)", default=0.2)
+    self.param("gnd0", self.TypeDouble, "Ground width 0 (µm)", default=0.2)
+    self.param("ext0", self.TypeDouble, "CPW length 0 (µm)", default=0.2)
+    self.param("sig1", self.TypeDouble, "Signal width 1 (µm)", default=0.2)
+    self.param("gap1", self.TypeDouble, "Gap width 1 (µm)", default=0.2)
+    self.param("gnd1", self.TypeDouble, "Ground width 1 (µm)", default=0.2)
+    self.param("ext1", self.TypeDouble, "CPW length 1 (µm)", default=0.2)
+    self.param("exp_m", self.TypeDouble, "Exponential factor", default=3.0, readonly=True)  # change readonly to True if changing default taper_type to exp
+
+  def display_text_impl(self):
+    """Provide a descriptive text for the cell"""
+    return f"PResonatorArray(L={str(self.l)},{self.taper_type})"
+  
+  def coerce_parameters_impl(self):
+    """Recalculate parameters"""
+    if self.taper_type == "exp":
+      self.param("exp_m", readonly=False)  # ### omit this, cannot be done, add it to the cycle further
+    else:
+      self.param("exp_m", readonly=True)
+    for i in [self.trlen, self.sig0, self.gap0, self.gnd0, self.ext0, self.sig0, self.gap0, self.gnd0, self.ext0]:
+      # Python implementation does not allow min_value parameter, thus this workaround
+      if i &lt; 0:
+        i = 0
+    if self.ppt &lt; 2: # minimum value
+      self.ppt = 2
+  
+  def can_create_from_shape_impl(self):
+    """Implement the "Create PCell from shape" protocol"""
+    # too complicated, no implementation
+    return False
+  
+  def parameters_from_shape_impl(self):
+    """Implement the "Create PCell from shape" protocol"""
+    # no implementation
+  
+  def transformation_from_shape_impl(self):
+    """Implement the "Create PCell from shape" protocol"""
+    # we use a default (0,0) coordinates
+    return pya.Trans(pya.Point(0,0))
+  
+  def _lin_taper(self, xs, ystart, ystop, *args):
+    """Returns a list of y values for a linear taper at points `xs`.
+    xs - 1darray (usually 0 to self.trlen), ystart - float, ystop - float,
+    no args used
+    """
+    return xs*(ystop-ystart)/(xs[-1]-xs[0])+ystart
+  
+  def _exp_taper(self, xs, ystart, ystop, *args):
+    """Returns a list of y values for a exponential taper at points `xs`.
+    xs - 1darray (usually 0 to self.trlen), ystart - float, ystop - float,
+    args[0] - float, &gt; 0 (usually also &gt; 1), modifier of the exponential
+    """
+    return (ystart + (np.exp(-(xs-xs[0])/(xs[-1]-xs[0])*args[0])-np.exp(-args[0]))
+            / (1-np.exp(-m))*(ystop-ystart))
+
+  def _sin_taper(self, xs, ystart, ystop, *args):
+    """Returns a list of y values for a sinusoidal taper at points `xs`.
+    xs - 1darray (usually 0 to self.trlen), ystart - float, ystop - float,
+    no args used
+    """
+    return ystart + np.cos(np.pi/2*(xs-xs[0])/(xs[-1]-xs[0]))**2*(ystop-ystart)
+  
+  def produce_impl(self):
+    """This is the main part of the implementation: create the layout"""
+    np_dpt = np.array([0, 0], dtype=pya.DPoint)
+    print(np_dpt)
+    
+    # origin in the (x=0, y_min), i.e. leftmost center -&gt; construct in +-y and +x directions
+    
+    # fetch the parameters
+    dbu = self.layout.dbu  # database unit
+    
+    # ### calculate the positions (lattice) ###
+    # CPW0 signal
+    cpw0_s = np.array([[0, -self.sig0/2], [self.ext0, -self.sig0/2],
+                       [self.ext0, self.sig0/2], [0, self.sig0/2]])/dbu
+    # CPW0 ground top
+    cpw0_gt = np.array([[0, (self.sig0/2+self.gap0)], [self.ext0, (self.sig0/2+self.gap0)],
+                        [self.ext0, (self.sig0/2+self.gap0+self.gnd0)/2], [0, (self.sig0/2+self.gap0+self.gnd0)]])/dbu
+    # CPW0 ground bottom
+    cpw0_gb = np.array([[0, -(self.sig0/2+self.gap0)], [self.ext0, -(self.sig0/2+self.gap0)],
+                        [self.ext0, -(self.sig0/2+self.gap0+self.gnd0)/2], -[0, (self.sig0/2+self.gap0+self.gnd0)]])/dbu  # ### maybe has to be counter-clockwise defined (see API)
+    # CPW1 signal
+    cpw1_s = np.array([[(self.ext0+self.trlen), -self.sig1/2], [(self.ext0+self.trlen+self.ext1), -self.sig1/2],
+              [(self.ext0+self.trlen+self.ext1), self.sig1/2], [(self.ext0+self.trlen), self.sig1/2]])/dbu
+    # CPW1 ground top
+    cpw1_gt = np.array([[(self.ext0+self.trlen), (self.sig1/2+self.gap1)], [(self.ext0+self.trlen+self.ext1), (self.sig1/2+self.gap1)],
+                        [(self.ext0+self.trlen+self.ext1), (self.sig1/2+self.gap1+self.gnd1)/2], [(self.ext0+self.trlen), (self.sig1/2+self.gap1+self.gnd1)]])/dbu
+    # CPW1 ground bottom
+    cpw1_gt = np.array([[(self.ext0+self.trlen), -(self.sig1/2+self.gap1)], [(self.ext0+self.trlen+self.ext1), -(self.sig1/2+self.gap1)],
+                        [(self.ext0+self.trlen+self.ext1), -(self.sig1/2+self.gap1+self.gnd1)/2], [(self.ext0+self.trlen), -(self.sig1/2+self.gap1+self.gnd1)]])/dbu  # ### maybe has to be counter-clockwise defined (see API)
+    # make the transition
+    xs = np.linspace(0, self.trlen, self.ppt) + self.ext0
+    if self.taper_type == "lin":  # select correct taper function
+      func = _lin_taper
+    if self.taper_type == "exp":
+      func = _exp_taper
+    if self.taper_type == "sin":
+      func = _sin_taper
+    ys_ts = func(xs, self.sig0/2, self.sig1/2, self.exp_m)  # top signal taper
+    ys_btg = func(xs, self.sig0/2+self.gap0, self.sig1/2+self.gap1, self.exp_m)  # bottom top ground taper
+    ys_ttg = func(xs, self.sig0/2+self.gap0+self.gnd0, self.sig1/2+self.gap1+self.gnd1, self.exp_m)  # bottom top ground taper
+    # transition ground top
+    tr_gt = np.concatenate(((xs, ys_btg), (xs[::-1], ys_ttg[::-1])), axis=1).T/dbu  # [point, x/y]
+    # transition singal
+    tr_s = np.concatenate(((xs, ys_ts), (xs[::-1], -ys_ts[::-1])), axis=1).T/dbu
+    # transition ground bottom
+    tr_gb = np.concatenate(((xs, -ys_ttg), (xs[::-1], -ys_btg[::-1])), axis=1).T/dbu
+    
+    # create the shapes
+    
+    self.cell.shapes(self.l_layer).insert(pya.Polygon(XXXXX))
+    
+    # ### CONTINUE REWRITING DOWNWARDS
+    
+    def uv2x(cu, cv):
+      """Calculate x coordinate from (u,v) lattice points."""
+      return r-cu*self.space*math.sin(self.tilt/180.*math.pi)+cv*self.space*math.cos(self.tilt/180.*math.pi)
+
+    def uv2y(cu, cv):
+      """Calculate y coordinate from (u,v) lattice points."""
+      return r+cu*self.space*math.cos(self.tilt/180.*math.pi)+cv*self.space*math.sin(self.tilt/180.*math.pi)
+      
+    # I want to omit the points outside or touching the bounding field
+    # nmax = maximum points to fit in the field
+    nmax = int(((self.fieldx-2*r)**2+(self.fieldy-2*r)**2)**0.5//self.space)
+    lattice = []  # list of resonator positions in the field
+    for u in range(-nmax+1, nmax):
+      for v in range(nmax):
+        xnow, ynow = uv2x(u, v), uv2y(u, v)
+        if (r &lt;= xnow &lt; self.fieldx-r) and (r &lt;= ynow &lt; self.fieldy-r):
+          lattice.append([xnow/self.layout.dbu, ynow/self.layout.dbu])
+    # print(len(lattice), nmax)
+    # print(lattice[:150])
+    # print(lattice[-150:])
+    
+    # pre-compute the circle (points in dbu)
+    pts = []
+    da = math.pi * 2 / self.ppc  # angle step
+    for i in range(0, self.ppc):
+      pts.append([rdbu*math.cos(i*da), rdbu*math.sin(i*da)])
+    
+    # create the shapes
+    ptsnew = pts
+    for i in range(len(lattice)):
+      for j in range(self.ppc):
+        if i == 0:
+          ptsnew[j][0] = pts[j][0]+lattice[i][0]
+          ptsnew[j][1] = pts[j][1]+lattice[i][1]
+        else:
+          ptsnew[j][0] = pts[j][0]+lattice[i][0]-lattice[i-1][0]  # I substract the last value bcs insertion
+          ptsnew[j][1] = pts[j][1]+lattice[i][1]-lattice[i-1][1]  # ...happens with respect to last item
+      ptsnow = [pya.Point.from_dpoint(pya.DPoint(*jj)) for jj in ptsnew]  # list of Points
+      self.cell.shapes(self.l_layer).insert(pya.Polygon(ptsnow))
+
+
+class CPWdesign(pya.Library):
+  """
+  The library where we will put the PCell into 
+  """
+
+  def __init__(self):
+  
+    # Set the description
+    self.description = "Tools for RF transmission line design (by Jan Klima)"
+    
+    # Create the PCell declarations
+    self.layout().register_pcell("PCPWTapers", PCPWTapers())
+    # That would be the place to put in more PCells ...
+    
+    # Register us with the name "name".
+    # If a library with that name already existed, it will be replaced then.
+    self.register("CPWdesign")
+
+
+# Instantiate and register the library
+CPWdesign()
+</text>
+</klayout-macro>

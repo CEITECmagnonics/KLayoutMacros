@@ -14,10 +14,7 @@
  <menu-path/>
  <interpreter>python</interpreter>
  <dsl-interpreter-name/>
- <text>import pya
-import math
-
-"""
+ <text>"""
 This sample PCell implements a library called "MyLibJKL" with a single PCell that
 draws a PResonatorArray. This parametric array allows the user to create an array 
 of circles within a given bounding box. These resonators can be tilted by 
@@ -27,8 +24,12 @@ NOTE: after changing the code, the macro needs to be rerun to install the new
 implementation.
 
 Created by Jan Klima on 2023/11/12
-Last update: 2023/11/23
+Last update: 2024/11/15
 """
+
+import pya
+import math
+
 
 class PResonatorArray(pya.PCellDeclarationHelper):
   """
