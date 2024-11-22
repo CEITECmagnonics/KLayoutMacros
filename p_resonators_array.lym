@@ -15,16 +15,17 @@
  <interpreter>python</interpreter>
  <dsl-interpreter-name/>
  <text>"""
-This sample PCell implements a library called "MyLibJKL" with a single PCell that
+This sample PCell implements a library called "MieBLS" with a single PCell that
 draws a PResonatorArray. This parametric array allows the user to create an array 
 of circles within a given bounding box. These resonators can be tilted by 
 an arbitrary angle while maintaining square lattice.
 
 NOTE: after changing the code, the macro needs to be rerun to install the new
 implementation.
+Written in KLayout 0.27.1.
 
 Created by Jan Klima on 2023/11/12
-Last update: 2024/11/15
+Last update: 2024/11/22
 """
 
 import pya
@@ -48,8 +49,8 @@ class PResonatorArray(pya.PCellDeclarationHelper):
     self.param("r", self.TypeDouble, "Radius (µm)", readonly=True)  # may be more useful in calculations
     self.param("space", self.TypeDouble, "Spacing (µm)", default=0.5)  # resonator spacing (um)
     self.param("tilt", self.TypeDouble, "Tilt (deg)", default=8)  # array tilt (deg)
-    self.param("fieldx", self.TypeDouble, "Field size X (µm)", default=50)
-    self.param("fieldy", self.TypeDouble, "Field size Y (µm)", default=50)  # field to fit the resonators into
+    self.param("fieldx", self.TypeDouble, "Field size X (µm)", default=10)
+    self.param("fieldy", self.TypeDouble, "Field size Y (µm)", default=10)  # field to fit the resonators into
     self.param("ppc", self.TypeInt, "Points per Circle", default=64)  # number of points in each circle
 
   def display_text_impl(self):
@@ -131,7 +132,7 @@ class PResonatorArray(pya.PCellDeclarationHelper):
       self.cell.shapes(self.l_layer).insert(pya.Polygon(ptsnow))
 
 
-class MyLibJKL(pya.Library):
+class MieBLS(pya.Library):
   """
   The library where we will put the PCell into 
   """
@@ -139,7 +140,7 @@ class MyLibJKL(pya.Library):
   def __init__(self):
   
     # Set the description
-    self.description = "My First Library (by Jan Klima)"
+    self.description = "Mie resonators and other structures."
     
     # Create the PCell declarations
     self.layout().register_pcell("PResonatorArray", PResonatorArray())
@@ -147,10 +148,10 @@ class MyLibJKL(pya.Library):
     
     # Register us with the name "MyLib".
     # If a library with that name already existed, it will be replaced then.
-    self.register("MyLibJKL")
+    self.register("MieBLS")
 
 
 # Instantiate and register the library
-MyLibJKL()
+MieBLS()
 </text>
 </klayout-macro>
