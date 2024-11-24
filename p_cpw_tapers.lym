@@ -28,7 +28,7 @@ NOTE: after changing the code, the macro needs to be rerun to install the new
 implementation.
 
 Created by Jan Klima on 2024/11/15
-Last update: 2024/11/22
+Last update: 2024/11/24
 """
 
 import pya
@@ -49,7 +49,6 @@ class PCPWTapers(pya.PCellDeclarationHelper):
     self.param("l", self.TypeLayer, "Layer", default=pya.LayerInfo(1, 0))
     self.param("ref", self.TypeShape, "", default=pya.DPoint(0, 0))  # reference point
     self.param("taper_type", self.TypeString, "Taper type", choices=[["linear", "lin"], ["exponential", "exp"], ["sine", "sin"]], default="lin")
-    self.param("trlen", self.TypeDouble, "Transition length (µm)", default=10)
     self.param("ppt", self.TypeInt, "Points per transition", default=11)  # including edge points
     self.param("sig0", self.TypeDouble, "Signal width 0 (µm)", default=16.0)
     self.param("gap0", self.TypeDouble, "Gap width 0 (µm)", default=8.0)
@@ -60,6 +59,9 @@ class PCPWTapers(pya.PCellDeclarationHelper):
     self.param("gnd1", self.TypeDouble, "Ground width 1 (µm)", default=16.0)
     self.param("ext1", self.TypeDouble, "CPW length 1 (µm)", default=10.0)
     self.param("exp_m", self.TypeDouble, "Exponential factor", default=3.0, readonly=False)  # cannot be changed dynamically :(, so always editable
+    self.param("trlen", self.TypeDouble, "Transition length (µm)", default=10)
+    self.param("dev", self.TypeDouble, "Max. deviation (%)", default=2)
+    self.param("rec_trlen", self.TypeDouble, "Recommended minimal\ntransition length (µm)", readonly=True)
 
   def display_text_impl(self):
     """Provide a descriptive text for the cell"""
@@ -73,6 +75,7 @@ class PCPWTapers(pya.PCellDeclarationHelper):
         i = 0
     if self.ppt &lt; 2: # minimum value
       self.ppt = 2
+    self.rec_trlen = self._recommend_length()
   
   def can_create_from_shape_impl(self):
     """Implement the "Create PCell from shape" protocol"""
@@ -109,6 +112,29 @@ class PCPWTapers(pya.PCellDeclarationHelper):
     no args used
     """
     return ystart + np.sin(np.pi/2*(xs-xs[0])/(xs[-1]-xs[0]))**2*(ystop-ystart)
+  
+  def _recommend_length(self):
+    """Estimate a minimal length of the transition to satisfy the maximum
+    deviation in the gap/impedance/whatever.
+    """
+    # make the transition
+    xs = np.linspace(0, self.trlen, self.ppt) + self.ext0
+    # ### Maybe change the number of pts to some better (fixed) value, 
+    #   so that the estimate is independent of chosed ppt.
+    if self.taper_type == "lin":  # select correct taper function
+      func = self._lin_taper
+      ind = 1  # index where to compute the deviation
+    elif self.taper_type == "exp":
+      func = self._exp_taper
+      ind = 1 if self.exp_m &gt;= 0 else -2
+    elif self.taper_type == "sin":
+      func = self._sin_taper
+      ind = self.ppt//2
+    else:
+      raise Exception(f"Wrong taper type {self.taper_type}")
+    y_g = func(xs, self.sig0/2+self.gap0, self.sig1/2+self.gap1, self.exp_m)  # bottom profile of top ground
+    rec_len = (y_g[ind+1]-y_g[ind-1])*self.ppt/2/np.tan(np.arccos(1-self.dev/100))
+    return np.round(np.abs(rec_len), 3-int(np.round(np.log10(np.abs(rec_len)))))
   
   def produce_impl(self):
     """This is the main part of the implementation: create the layout"""
