@@ -15,6 +15,7 @@ There is a possibility to automatically run any macro at startup of KLayout. Thi
 
 
 <hr>
+
 ## Tips for python development of KLayout macros
 
 KLayout is written primarily in Ruby, therefore also the [API documentation](https://www.klayout.de/doc-qt5/index.html) (especially the [Class Index](https://www.klayout.de/doc-qt5/code/index.html) can be useful) is written only in Ruby. There may be differences between Ruby and Python implementations, which means, that there are mission information. Quite helpful can be using the `help()` command and temporarily print its contents mid-macro development.
