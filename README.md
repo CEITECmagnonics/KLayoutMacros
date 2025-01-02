@@ -18,9 +18,9 @@ There is a possibility to automatically run any macro at startup of KLayout. Thi
 
 ## Tips for python development of KLayout macros
 
-KLayout is written primarily in Ruby, therefore also the [API documentation](https://www.klayout.de/doc-qt5/index.html) (especially the [Class Index](https://www.klayout.de/doc-qt5/code/index.html) can be useful) is written only in Ruby. There may be differences between Ruby and Python implementations, which means, that there are mission information. Quite helpful can be using the `help()` command and temporarily print its contents mid-macro development.
+KLayout is written primarily in Ruby, therefore also the [API documentation](https://www.klayout.de/doc-qt5/index.html) (especially the [Class Index](https://www.klayout.de/doc-qt5/code/index.html) can be useful) is written only in Ruby. There may be differences between Ruby and Python implementations, which means, that there are missing information. Quite helpful can be using the `help()` command and temporarily print its contents mid-macro development.
 
-There is also quite high chance, that the bugs I report here, are just de to an older version of KLayout. My current version of KLayout is 0.27.1 (appropriate documentation [here](https://www.klayout.de/0.27/doc/code/class_PCellDeclarationHelper.html)).
+There is also quite high chance, that the bugs I report here, are just due to an older version of KLayout. My current version of KLayout is 0.27.1 (appropriate documentation [here](https://www.klayout.de/0.27/doc/code/class_PCellDeclarationHelper.html)).
 
 - Inserting shapes to a cell/layer has to be done directly (`self.cell.shapes(self.l_layer).insert(pya.Box(...))`, not `box_obj=pya.Box(...);self.cell.shapes(self.l_layer).insert(box_obj)`). I don't know why, but inseting objects of shapes is not working.
  
