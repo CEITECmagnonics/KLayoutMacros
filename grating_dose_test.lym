@@ -1,0 +1,257 @@
+<?xml version="1.0" encoding="utf-8"?>
+<klayout-macro>
+ <description/>
+ <version/>
+ <category>pymacros</category>
+ <prolog/>
+ <epilog/>
+ <doc/>
+ <autorun>false</autorun>
+ <autorun-early>false</autorun-early>
+ <priority>0</priority>
+ <shortcut/>
+ <show-in-menu>false</show-in-menu>
+ <group-name/>
+ <menu-path/>
+ <interpreter>python</interpreter>
+ <dsl-interpreter-name/>
+ <text># $description: Grating Dose Matrix v15.0 (Split Text Layers)
+# $version: 15.0
+# $autoregister: true
+# $interpreter: python
+
+"""
+Grating Dose Matrix v15.0
+
+Changes:
+- SPLIT TEXT LAYERS: 
+  * 'Text Layer (Big)' for Headers and Array Name.
+  * 'Text Layer (Small)' for individual grating labels.
+  * This allows different EBL doses for large vs small text.
+"""
+
+import pya
+
+# =============================================================
+# 1. The Basic Unit
+# =============================================================
+class SingleGrating(pya.PCellDeclarationHelper):
+    def __init__(self):
+        super(SingleGrating, self).__init__()
+        self.param("l", self.TypeLayer, "Layer", default=pya.LayerInfo(1, 0))
+        self.param("size", self.TypeDouble, "Square Size (um)", default=10.0)
+        self.param("period_nm", self.TypeDouble, "Period (nm)", default=100.0) 
+        self.param("duty", self.TypeDouble, "Duty Cycle (0.0-1.0)", default=0.5)
+
+    def display_text_impl(self):
+        return "Grating(Size=%.1f, P=%.0fnm, DC=%.2f)" % (self.size, self.period_nm, self.duty)
+
+    def produce_impl(self):
+        p_um = self.period_nm / 1000.0
+        if p_um &lt;= 0.001: p_um = 0.001
+
+        n_lines = int(self.size / p_um)
+        if n_lines &lt; 1: n_lines = 1
+
+        w = p_um * self.duty
+        if w &lt;= 0.001: w = 0.001 
+        
+        w_half, l_half = w / 2.0, self.size / 2.0
+        
+        base_poly = pya.DPolygon([
+            pya.DPoint(-w_half, -l_half), pya.DPoint(w_half, -l_half),
+            pya.DPoint(w_half, l_half), pya.DPoint(-w_half, l_half)
+        ])
+        
+        center_offset_idx = (n_lines - 1) / 2.0
+        for i in range(n_lines):
+            shift_x = (i - center_offset_idx) * p_um
+            trans = pya.DCplxTrans(1.0, 0.0, False, shift_x, 0)
+            self.cell.shapes(self.l_layer).insert(base_poly.transformed(trans))
+
+
+# =============================================================
+# 2. The Matrix Generator
+# =============================================================
+class DoseMatrix(pya.PCellDeclarationHelper):
+    def __init__(self):
+        super(DoseMatrix, self).__init__()
+
+        # --- User Inputs ---
+        self.param("array_name", self.TypeString, "Array Name", default="My_Grat_Array")
+        
+        self.param("p_list_nm", self.TypeString, "Periodicities (nm) [comma sep]", default="80, 100, 120, 140, 160, 180, 200, 220, 240, 260")
+        self.param("duty_list", self.TypeString, "Duty Cycles (Columns) (0.0-1.0)", default="0.3, 0.5, 0.7")
+        self.param("layer_list", self.TypeString, "Dose Layers (Rows) (Indices)", default="1, 2, 3")
+        
+        # --- Grating Geometry ---
+        self.param("g_size", self.TypeDouble, "Grating Square Size (um)", default=10.0)
+        
+        # --- Matrix Layout ---
+        self.param("items_row", self.TypeInt, "Items per Row (Wrap)", default=5)
+        self.param("sub_pitch_x", self.TypeDouble, "Sub-Spacing X (um)", default=20.0)
+        self.param("sub_pitch_y", self.TypeDouble, "Sub-Spacing Y (um)", default=35.0)
+        
+        self.param("pitch_x", self.TypeDouble, "Main Pitch X (Duty Step) (um)", default=120.0)
+        self.param("pitch_y", self.TypeDouble, "Main Pitch Y (Dose Step) (um)", default=150.0)
+        
+        # --- Text Settings ---
+        # SPLIT LAYERS
+        self.param("text_layer_big", self.TypeLayer, "Text Layer (Big Headers)", default=pya.LayerInfo(10, 0))
+        self.param("text_layer_small", self.TypeLayer, "Text Layer (Small Labels)", default=pya.LayerInfo(11, 0))
+        
+        # Margins
+        self.param("header_margin", self.TypeDouble, "Header Margin (Rows/Cols) (um)", default=15.0)
+        self.param("grating_label_margin", self.TypeDouble, "Grating Label Margin (um)", default=3.0)
+        self.param("name_margin", self.TypeDouble, "Array Name Margin (Bottom) (um)", default=50.0)
+        
+        self.param("text_size_name", self.TypeDouble, "Array Name Size (um)", default=5.0)
+        self.param("text_size_header", self.TypeDouble, "Header Text Size (um)", default=2.0)
+        self.param("text_size_sub", self.TypeDouble, "Label Text Size (um)", default=0.5)
+
+    def display_text_impl(self):
+        return "DoseMatrix"
+
+    def parse_float_list(self, s):
+        try: return [float(x.strip()) for x in s.split(',') if x.strip()]
+        except: return [0.5]
+
+    def parse_int_list(self, s):
+        try: return [int(x.strip()) for x in s.split(',') if x.strip()]
+        except: return [1]
+
+    def draw_text(self, text, x, y, size, layer_index, align="center"):
+        gen = pya.TextGenerator.default_generator()
+        region = gen.text(text, self.layout.dbu)
+        
+        scale = size * (1.0 / self.layout.dbu) / 1000.0
+        t_scale = pya.DCplxTrans(scale) 
+        region.transform(pya.ICplxTrans.from_dtrans(t_scale))
+        
+        bbox = region.bbox()
+        if bbox.empty(): return
+
+        center_x_dbu, center_y_dbu = bbox.center().x, bbox.center().y
+        target_x_dbu, target_y_dbu = x / self.layout.dbu, y / self.layout.dbu
+        
+        if align == "left":
+            dx = target_x_dbu - bbox.left
+        elif align == "right":
+            dx = target_x_dbu - bbox.right
+        else:
+            dx = target_x_dbu - center_x_dbu
+        
+        dy = target_y_dbu - center_y_dbu
+        
+        t_move = pya.ICplxTrans(1.0, 0.0, False, int(dx), int(dy))
+        region.transform(t_move)
+        
+        for poly in region.each():
+            self.cell.shapes(layer_index).insert(poly)
+
+    def produce_impl(self):
+        periods_nm = self.parse_float_list(self.p_list_nm)
+        duties = self.parse_float_list(self.duty_list)
+        doses = self.parse_int_list(self.layer_list)
+        
+        if self.items_row &lt; 1: self.items_row = 1
+        
+        # Get Layer Indices
+        layer_big_idx = self.layout.layer(self.text_layer_big)
+        layer_small_idx = self.layout.layer(self.text_layer_small)
+
+        # Pre-calc Grid Dimensions
+        count_items = len(periods_nm)
+        sub_rows_count = (count_items + self.items_row - 1) // self.items_row
+        
+        sub_cols = min(count_items, self.items_row)
+        group_width = (sub_cols - 1) * self.sub_pitch_x
+        grid_height_span = (sub_rows_count - 1) * self.sub_pitch_y
+        grid_center_y_offset = grid_height_span / 2.0
+        g_half = self.g_size / 2.0
+
+        num_rows = len(doses)
+        num_cols = len(duties)
+        
+        # Matrix Width for Bottom Name Centering
+        total_matrix_width = (num_cols - 1) * self.pitch_x + group_width
+        matrix_center_x = total_matrix_width / 2.0
+
+        for row_idx, layer_num in enumerate(doses):
+            y_base = row_idx * self.pitch_y
+            
+            # --- HEADER: ROW (Dose) -&gt; BIG LAYER ---
+            y_center_group = y_base + grid_center_y_offset
+            row_header_x = -g_half - self.header_margin
+            
+            self.draw_text(f"D{layer_num}", row_header_x, y_center_group, self.text_size_header, layer_big_idx, align="right")
+
+            current_layer_idx = self.layout.layer(layer_num, 0)
+            dose_shapes = self.cell.shapes(current_layer_idx)
+
+            for col_idx, duty in enumerate(duties):
+                x_base = col_idx * self.pitch_x
+                
+                # --- HEADER: COLUMN (Duty) -&gt; BIG LAYER ---
+                if row_idx == num_rows - 1:
+                     center_group_x = x_base + (group_width / 2.0)
+                     
+                     top_grating_center_y = y_base + grid_height_span
+                     col_header_y = top_grating_center_y + g_half + self.header_margin
+                     
+                     self.draw_text(f"{duty:.2f}", center_group_x, col_header_y, self.text_size_header, layer_big_idx, align="center")
+
+                # --- GRATINGS LOOP ---
+                for p_idx, p_nm in enumerate(periods_nm):
+                    
+                    c_local = p_idx % self.items_row
+                    r_local = p_idx // self.items_row
+                    
+                    sub_x = x_base + (c_local * self.sub_pitch_x)
+                    sub_y = y_base + (r_local * self.sub_pitch_y)
+                    
+                    p_um = p_nm / 1000.0 
+                    n_lines = int(self.g_size / p_um)
+                    if n_lines &lt; 1: n_lines = 1
+
+                    w = p_um * duty
+                    if w &lt;= 0.001: w = 0.001
+                    w_half = w / 2.0
+                    
+                    base_poly = pya.DPolygon([
+                        pya.DPoint(-w_half, -g_half), pya.DPoint(w_half, -g_half),
+                        pya.DPoint(w_half, g_half), pya.DPoint(-w_half, g_half)
+                    ])
+                    
+                    center_offset_idx = (n_lines - 1) / 2.0
+                    
+                    for line_i in range(n_lines):
+                        local_shift_x = (line_i - center_offset_idx) * p_um
+                        trans = pya.DCplxTrans(1.0, 0.0, False, sub_x + local_shift_x, sub_y)
+                        dose_shapes.insert(base_poly.transformed(trans))
+
+                    # --- DETAILED LABEL -&gt; SMALL LAYER ---
+                    label_text = f"{int(p_nm)}nm\nD{layer_num}\n{duty:.2f}"
+                    
+                    label_x = sub_x - g_half
+                    label_y = sub_y + g_half + self.grating_label_margin
+                    
+                    self.draw_text(label_text, label_x, label_y, self.text_size_sub, layer_small_idx, align="left")
+
+        # 3. Draw Array Name (Underneath) -&gt; BIG LAYER
+        name_y_pos = -g_half - self.name_margin
+        self.draw_text(self.array_name, matrix_center_x, name_y_pos, self.text_size_name, layer_big_idx, align="center")
+
+
+# =============================================================
+# 3. Register
+# =============================================================
+class GratingMatrixLib(pya.Library):
+    def __init__(self):
+        self.description = "Grating Matrix Lib v15.0"
+        self.layout().register_pcell("SingleGrating", SingleGrating())
+        self.layout().register_pcell("DoseMatrix", DoseMatrix())
+        self.register("GratingMatrixLib")
+
+GratingMatrixLib()</text>
+</klayout-macro>
