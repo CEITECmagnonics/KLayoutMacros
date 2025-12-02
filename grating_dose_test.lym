@@ -22,6 +22,7 @@
 
 """
 Grating Dose Matrix
+KLayout 0.30.3
 """
 
 import pya
@@ -249,4 +250,5 @@ class GratingMatrixLib(pya.Library):
 
 GratingMatrixLib()</text>
 </klayout-macro>
+
 
