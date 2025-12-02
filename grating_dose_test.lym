@@ -21,13 +21,7 @@
 # $interpreter: python
 
 """
-Grating Dose Matrix v15.0
-
-Changes:
-- SPLIT TEXT LAYERS: 
-  * 'Text Layer (Big)' for Headers and Array Name.
-  * 'Text Layer (Small)' for individual grating labels.
-  * This allows different EBL doses for large vs small text.
+Grating Dose Matrix
 """
 
 import pya
@@ -255,3 +249,4 @@ class GratingMatrixLib(pya.Library):
 
 GratingMatrixLib()</text>
 </klayout-macro>
+
